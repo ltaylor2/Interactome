@@ -1,0 +1,46 @@
+characters <- readDiscreteCharacterData("Data/chars_ESF_EL.nex")
+
+moves = VectorMoves()
+monitors = VectorMonitors()
+
+phylogeny <- readTrees("Data/species.nwk")[1]
+
+mu_characters ~ dnExponential(1.0)
+moves.append( mvScale(mu_characters,lambda=1, weight=2.0) )
+
+Q_characters <- fnJC(2)
+
+phy_characters ~ dnPhyloCTMC(tree=phylogeny, branchRates=mu_characters, Q=Q_characters, type="Standard")
+
+phy_characters.clamp(characters)
+
+model_characters = model(phylogeny)
+
+monitors.append(mnModel(filename="Output/test.log", printgen=1000))
+monitors.append(mnScreen(printgen=1000))
+
+monitors.append(mnJointConditionalAncestralState(tree=phylogeny,
+                                                 ctmc=phy_characters,
+                                                 filename="Output/test_ase.txt",
+                                                 type="Standard",
+                                                 printgen=1000,
+                                                 withTips=true,
+                                                 withStartStates=false))
+
+mcmc_characters = mcmc(model_characters, monitors, moves, 
+                       nruns=10, combine="mixed")
+
+mcmc_characters.run(generations=1000000, tuningInterval=1000)
+
+ase_states = readAncestralStateTrace("Output/test_ase.txt")
+ase_tree = ancestralStateTree(tree=phylogeny,
+                              ancestral_state_trace_vector=ase_states,
+                              include_start_states=false,
+                              file="Output/test_ase.tre",
+                              burnin=0,
+                              summary_statistic="MAP",
+                              site=1)
+
+writeNexus(ase_tree, filename="Output/test_ase.nex")
+
+q()
